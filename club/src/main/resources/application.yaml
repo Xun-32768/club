@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: club
+
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/db_club?characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: '060216'
+
+  session:
+    store-type: jdbc # 确保存储类型是 JDBC
+    jdbc:
+      initialize-schema: always # 启动时自动建表
+      table-name: SPRING_SESSION # 表名默认值
+
+mybatis:
+  #mapper配置文件
+  mapper-locations: classpath:Mapper/*.xml
+  type-aliases-package: com.example.club.entity
+  configuration:
+    #开启驼峰命名
+    map-underscore-to-camel-case: true
+
+server:
+  port: 32768
