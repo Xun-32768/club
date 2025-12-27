@@ -32,7 +32,7 @@
                             </template>
                         </el-table-column>
 
-                        <el-table-column label="操作" width="200">
+                        <el-table-column label="操作" width="250">
                             <template #default="scope">
                                 <div v-if="scope.row.status === 0">
                                     <el-button type="success" size="small"
@@ -40,8 +40,17 @@
                                     <el-button type="danger" size="small"
                                         @click="handleAudit(scope.row.id, false)">拒绝</el-button>
                                 </div>
+
+                                <div v-else-if="scope.row.status === 1 && scope.row.memberRole !== 2">
+                                    <el-button type="warning" size="small" plain @click="handleTransfer(scope.row)">
+                                        转让社长
+                                    </el-button>
+                                    <el-button type="danger" size="small" link
+                                        @click="handleRemoveMember(scope.row.id)">移除</el-button>
+                                </div>
+
                                 <div v-else>
-                                    <span style="color: #999; font-size: 12px">无需操作</span>
+                                    <el-tag size="small" type="warning" effect="plain">现任社长</el-tag>
                                 </div>
                             </template>
                         </el-table-column>
@@ -52,7 +61,7 @@
                     <div class="tab-action">
                         <el-radio-group v-model="activityStatusFilter" size="small" @change="fetchClubActivities">
                             <el-radio-button :label="-1">全部活动</el-radio-button>
-                            <el-radio-button :label="1">进行中</el-radio-button>
+                            <el-radio-button :label="1">已发布</el-radio-button>
                             <el-radio-button :label="2">已结束</el-radio-button>
                         </el-radio-group>
                         <el-button type="primary" size="small" @click="openActivityDialog">发布新活动</el-button>
@@ -99,7 +108,7 @@
                                 <el-input-number v-model="activityForm.maxPeople" :min="0" placeholder="0表示不限" />
                             </el-form-item>
                             <el-form-item label="活动内容" prop="content">
-                                <el-input v-model="activityForm.content" type="textarea" rows="4"
+                                <el-input v-model="activityForm.content" type="textarea" :rows="4"
                                     placeholder="请输入活动详情..." />
                             </el-form-item>
                         </el-form>
@@ -225,18 +234,40 @@ const fetchClubActivities = async () => {
     }
 };
 
-// 修改 submitActivity 成功后的逻辑
 const submitActivity = () => {
     activityFormRef.value.validate(async (valid) => {
         if (valid) {
-            // ... 原有发送请求代码 ...
-            await request.post('/activity/add', postData);
-            ElMessage.success('活动发布成功！');
-            activityVisible.value = false;
-            fetchClubActivities(); // 成功后刷新列表
+            activityLoading.value = true
+            try {
+                // 1. 正确定义 postData，合并表单数据并处理时间字段
+                const postData = {
+                    clubId: route.params.id, // 确保携带当前社团ID
+                    title: activityForm.title,
+                    location: activityForm.location,
+                    maxPeople: activityForm.maxPeople,
+                    content: activityForm.content,
+                    startTime: activityForm.timeRange[0], // 从时间范围数组中提取
+                    endTime: activityForm.timeRange[1]
+                }
+
+                // 2. 发送请求
+                await request.post('/activity/add', postData)
+
+                ElMessage.success('活动发布成功！')
+                activityVisible.value = false
+
+                // 3. 刷新活动列表（如果你之前实现了 fetchClubActivities）
+                if (typeof fetchClubActivities === 'function') {
+                    fetchClubActivities()
+                }
+            } catch (error) {
+                console.error('发布活动失败:', error)
+            } finally {
+                activityLoading.value = false
+            }
         }
-    });
-};
+    })
+}
 
 // 删除活动逻辑
 const handleDeleteActivity = (id) => {
@@ -245,6 +276,33 @@ const handleDeleteActivity = (id) => {
         // await request.delete(`/activity/${id}`); 
         ElMessage.success('删除功能待后端实现');
     });
+};
+
+const handleTransfer = (memberRow) => {
+    ElMessageBox.confirm(
+        `确定要将社长职位转让给【${memberRow.realName}】吗？转让后你将失去管理权限！`,
+        '职位转让警告',
+        {
+            confirmButtonText: '确定转让',
+            cancelButtonText: '取消',
+            type: 'warning',
+        }
+    ).then(async () => {
+        try {
+            await request.post('/club/transfer', {
+                clubId: clubId,
+                newUserId: memberRow.userId // 注意这里使用的是成员对应的用户ID
+            });
+            ElMessage.success('转让成功，正在退出管理页面...');
+            
+            // 转让后由于失去权限，跳转回“我的社团”
+            setTimeout(() => {
+                router.push('/my-club');
+            }, 1500);
+        } catch (error) {
+            console.error('转让失败', error);
+        }
+    }).catch(() => {});
 };
 
 // 在原有的 onMounted 中增加调用

@@ -15,7 +15,12 @@
             <el-col :span="8" v-for="item in activityList" :key="item.id" style="margin-bottom: 20px">
                 <el-card :body-style="{ padding: '0px' }" shadow="hover" class="activity-card">
                     <div class="card-tag">
-                        <el-tag effect="dark" type="success">报名中</el-tag>
+                        <el-tag v-if="!isSignupAvailable(item)" effect="dark" type="danger">
+                            已截止
+                        </el-tag>
+                        <el-tag v-else effect="dark" type="success">
+                            报名中
+                        </el-tag>
                     </div>
                     <div style="padding: 20px">
                         <h3 class="title">{{ item.title }}</h3>
@@ -40,7 +45,18 @@
                         <p class="content-preview">{{ item.content }}</p>
                         <div class="bottom">
                             <el-button type="primary" plain @click="handleDetail(item.id)">查看详情</el-button>
-                            <el-button type="success" @click="handleSignup(item.id)">立即报名</el-button>
+
+                            <el-button v-if="item.isSignedUp" type="info" disabled>
+                                已报名
+                            </el-button>
+
+                            <el-button v-else-if="!isSignupAvailable(item)" type="info" disabled>
+                                报名已截止
+                            </el-button>
+
+                            <el-button v-else type="success" @click="handleSignup(item.id)">
+                                立即报名
+                            </el-button>
                         </div>
                     </div>
                 </el-card>
@@ -61,7 +77,8 @@
                         </el-icon> <b>地点：</b>{{ currentActivity.location }}</p>
                     <p><el-icon>
                             <User />
-                        </el-icon> <b>人数限制：</b>{{ currentActivity.maxPeople === 0 ? '不限' : currentActivity.maxPeople + '人' }}</p>
+                        </el-icon> <b>人数限制：</b>{{ currentActivity.maxPeople === 0 ? '不限' : currentActivity.maxPeople +
+                            '人' }}</p>
                 </div>
 
                 <el-divider content-position="left">活动介绍</el-divider>
@@ -138,16 +155,27 @@ const currentActivity = ref(null)
 
 // 查看详情
 const handleDetail = async (id) => {
-  try {
-    const res = await request.get(`/activity/${id}`)
-    currentActivity.value = res
-    detailVisible.value = true
-  } catch (error) {
-    console.error('获取详情失败', error)
-  }
+    try {
+        const res = await request.get(`/activity/${id}`)
+        currentActivity.value = res
+        detailVisible.value = true
+    } catch (error) {
+        console.error('获取详情失败', error)
+    }
 }
 
+const isSignupAvailable = (item) => {
+    if (!item.startTime) return false;
 
+    const startTime = new Date(item.startTime.replace('T', ' '));
+    const now = new Date();
+
+    // 计算时间差（毫秒）
+    const diff = startTime.getTime() - now.getTime();
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    return diff > oneDay; // 剩余时间大于24小时才允许
+}
 onMounted(fetchActivities)
 </script>
 
@@ -203,24 +231,27 @@ onMounted(fetchActivities)
 }
 
 .detail-title {
-  color: #303133;
-  margin-bottom: 20px;
-  text-align: center;
+    color: #303133;
+    margin-bottom: 20px;
+    text-align: center;
 }
+
 .detail-info p {
-  margin: 12px 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 15px;
-  color: #606266;
+    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    color: #606266;
 }
+
 .detail-desc {
-  line-height: 1.8;
-  color: #333;
-  white-space: pre-wrap; /* 保留后台输入的换行 */
-  padding: 10px;
-  background: #f8f9fa;
-  border-radius: 4px;
+    line-height: 1.8;
+    color: #333;
+    white-space: pre-wrap;
+    /* 保留后台输入的换行 */
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 4px;
 }
 </style>

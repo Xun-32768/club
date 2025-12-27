@@ -1,6 +1,9 @@
 package com.example.club.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.club.common.Result;
+import com.example.club.entity.ActivityMember;
+import com.example.club.entity.User;
 import com.example.club.entity.vo.MyActivityVO;
 import com.example.club.service.IActivityMemberService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,5 +43,20 @@ public class ActivityMemberController {
     public Result<List<MyActivityVO>> getMyActivities() {
         return Result.success(activityMemberService.getMyActivities());
     }
+
+    @PostMapping("/cancel")
+    public Result<?> cancelSignup(@RequestBody Map<String, Long> params) {
+        Long activityId = params.get("activityId");
+        if (activityId == null) return Result.fail("参数错误");
+
+        try {
+            activityMemberService.cancelSignup(activityId);
+            return Result.success("已取消报名");
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+
 }
 

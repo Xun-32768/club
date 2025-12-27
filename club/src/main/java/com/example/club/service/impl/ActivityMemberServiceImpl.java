@@ -3,8 +3,10 @@ package com.example.club.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.club.entity.Activity;
 import com.example.club.entity.ActivityMember;
+import com.example.club.entity.User;
 import com.example.club.entity.vo.MyActivityVO;
 import com.example.club.mapper.ActivityMemberMapper;
+import com.example.club.mapper.UserMapper;
 import com.example.club.service.IActivityMemberService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.club.service.IActivityService;
@@ -13,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,9 +32,11 @@ import java.util.stream.Collectors;
 @Service
 public class ActivityMemberServiceImpl extends ServiceImpl<ActivityMemberMapper, ActivityMember> implements IActivityMemberService {
 
-    // ActivityMemberServiceImpl.java
     @Autowired
     private IActivityService activityService;
+
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -40,6 +45,15 @@ public class ActivityMemberServiceImpl extends ServiceImpl<ActivityMemberMapper,
 
         // 1. 基础校验（活动状态、人数）
         activityService.checkActivityForSignup(activityId);
+
+//        时间校验
+        Activity activity = activityService.checkActivityForSignup(activityId);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime deadline = activity.getStartTime().minusDays(1); // 开始时间减去1天
+
+        if (now.isAfter(deadline)) {
+            throw new RuntimeException("报名已截止（活动开始前24小时停止报名）");
+        }
 
         // 2. 重复报名校验
         Long count = this.count(new LambdaQueryWrapper<ActivityMember>()
@@ -83,6 +97,7 @@ public class ActivityMemberServiceImpl extends ServiceImpl<ActivityMemberMapper,
                 vo.setTitle(a.getTitle());
                 vo.setLocation(a.getLocation());
                 vo.setStartTime(a.getStartTime());
+                vo.setEndTime(a.getEndTime());
                 vo.setStatus(a.getStatus());
             }
             vo.setCheckinStatus(m.getCheckinStatus());
@@ -90,5 +105,26 @@ public class ActivityMemberServiceImpl extends ServiceImpl<ActivityMemberMapper,
             return vo;
         }).toList();
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelSignup(Long activityId) {
+        Long userId = UserContext.getUserId(); // 获取当前登录用户
+
+        // 1. 校验活动是否已开始（可选安全校验）
+        Activity activity = activityService.getById(activityId);
+        if (activity != null && activity.getStartTime().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("活动已开始，无法取消报名");
+        }
+
+        // 2. 删除报名记录
+        LambdaQueryWrapper<ActivityMember> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ActivityMember::getActivityId, activityId)
+                .eq(ActivityMember::getUserId, userId);
+
+        this.remove(wrapper);
+    }
+
+
 
 }

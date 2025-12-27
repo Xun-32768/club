@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.club.entity.Club;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -45,61 +47,77 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
     @Autowired
     private ClubMemberMapper clubMemberMapper;
 
+    @Override
     public Page<ClubVO> listClubs(ClubQueryDTO dto) {
-
-        // 1. 获取当前用户ID和角色
+        // 获取当前用户ID用于判断加入状态
         Long userId = UserContext.getUserId();
-        User user = userService.getById(userId);
-        Integer role = user.getSystemRole(); // 0-超级管理员, 1-普通学生
 
+        // 1. 分页查询社团基础信息
         Page<Club> page = new Page<>(dto.page() == null ? 1 : dto.page(), dto.size() == null ? 10 : dto.size());
         LambdaQueryWrapper<Club> wrapper = new LambdaQueryWrapper<>();
 
-//        只显示审核通过的社团
-        wrapper.eq(Club::getStatus, 1).orderByAsc(Club::getStatus);
+        // 获取用户信息以判断系统角色
+        User currentUser = userService.getById(userId);
+        // 管理员(0)看全部，普通学生看正常状态(1)
+        if (currentUser == null || currentUser.getSystemRole() != 0) {
+            wrapper.eq(Club::getStatus, 1);
+        }
+
+        // 模糊查询社团名称并按创建时间倒序
         wrapper.like(StrUtil.isNotBlank(dto.name()), Club::getName, dto.name());
         wrapper.orderByDesc(Club::getCreateTime);
-
         this.page(page, wrapper);
 
- // 类型转换 Entity -> VO
         List<Club> records = page.getRecords();
         if (records.isEmpty()) {
             return new Page<>();
         }
 
-        //  提取所有的社长ID (creator_id)
-        List<Long> userIds = records.stream().map(Club::getCreatorId).collect(Collectors.toList());
+        // 2. 提取当前页社团ID和社长ID集合
+        List<Long> clubIds = records.stream().map(Club::getId).collect(Collectors.toList());
+        List<Long> presidentIds = records.stream().map(Club::getCreatorId).distinct().collect(Collectors.toList());
 
-        // 获取社长姓名
-        Map<Long, String> userMap = userService.listByIds(userIds).stream()
+        // 3. 核心逻辑：查询当前用户与这些社团的关联状态
+        Set<Long> joinedClubIds = clubMemberMapper.selectList(new LambdaQueryWrapper<ClubMember>()
+                        .eq(ClubMember::getUserId, userId)
+                        .in(ClubMember::getClubId, clubIds))
+                .stream().map(ClubMember::getClubId).collect(Collectors.toSet());
+
+        // 4. 扩展逻辑：批量查询社长姓名
+        Map<Long, String> presidentMap = userService.listByIds(presidentIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getRealName));
 
-        //批量统计每个社团的成员数量
-        List<Long> clubIds = records.stream().map(Club::getId).collect(Collectors.toList());
-
-        // 查询 club_member 表中状态为已入社(1)的记录，并按社团ID分组统计
+        // 5. 扩展逻辑：批量统计每个社团的正式成员数量
         QueryWrapper<ClubMember> memberQuery = new QueryWrapper<>();
         memberQuery.select("club_id", "count(*) as count")
                 .in("club_id", clubIds)
-                .eq("status", 1) // 只统计正式成员
+                .eq("status", 1) // 统计已入社成员
                 .groupBy("club_id");
 
         List<Map<String, Object>> countMaps = clubMemberMapper.selectMaps(memberQuery);
-        Map<Long, Integer> countMap = countMaps.stream().collect(Collectors.toMap(
+        Map<Long, Integer> memberCountMap = countMaps.stream().collect(Collectors.toMap(
                 m -> Long.valueOf(m.get("club_id").toString()),
                 m -> Integer.valueOf(m.get("count").toString())
         ));
-        // 4.3 组装 VO
+
+        // 6. 组装 VO 列表
         List<ClubVO> voList = records.stream().map(club -> {
             ClubVO vo = new ClubVO();
-            BeanUtil.copyProperties(club, vo); // Hutool 工具类拷贝属性
-            vo.setPresidentName(userMap.getOrDefault(club.getCreatorId(), "未知"));
-            vo.setMemberCount(countMap.getOrDefault(club.getId(), 0));
+            BeanUtil.copyProperties(club, vo);
+
+            // 设置社长姓名
+            vo.setPresidentName(presidentMap.getOrDefault(club.getCreatorId(), "未知"));
+
+            // 设置成员数量
+            vo.setMemberCount(memberCountMap.getOrDefault(club.getId(), 0));
+
+            // 设置当前用户的加入状态
+            vo.setIsJoined(joinedClubIds.contains(club.getId()));
+
             return vo;
         }).collect(Collectors.toList());
 
-        // 5. 重新封装分页结果
+        // 7. 封装返回分页结果
         Page<ClubVO> resultPage = new Page<>();
         BeanUtil.copyProperties(page, resultPage, "records");
         resultPage.setRecords(voList);
@@ -235,6 +253,36 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
         }
         return saved;
     }
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void transferPresident(Long clubId, Long newPresidentUserId) {
+        Long currentUserId = UserContext.getUserId();
 
+        // 1. 校验当前用户是否为该社团的真实社长
+        Club club = this.getById(clubId);
+        if (club == null) throw new RuntimeException("社团不存在");
+        if (!club.getCreatorId().equals(currentUserId)) {
+            throw new RuntimeException("只有现任社长有权转让职位");
+        }
+
+        // 2. 将原社长降职为普通成员
+        LambdaUpdateWrapper<ClubMember> demoteWrapper = new LambdaUpdateWrapper<>();
+        demoteWrapper.eq(ClubMember::getClubId, clubId)
+                .eq(ClubMember::getUserId, currentUserId)
+                .set(ClubMember::getMemberRole, 1);
+        clubMemberMapper.update(null, demoteWrapper);
+
+        // 3. 将新用户提升为社长
+        LambdaUpdateWrapper<ClubMember> promoteWrapper = new LambdaUpdateWrapper<>();
+        promoteWrapper.eq(ClubMember::getClubId, clubId)
+                .eq(ClubMember::getUserId, newPresidentUserId)
+                .set(ClubMember::getMemberRole, 2)
+                .set(ClubMember::getStatus, 1); // 确保其状态是正式成员
+        clubMemberMapper.update(null, promoteWrapper);
+
+        // 4. 更新社团主表的创建者（社长）ID
+        club.setCreatorId(newPresidentUserId);
+        this.updateById(club);
+    }
 
 }

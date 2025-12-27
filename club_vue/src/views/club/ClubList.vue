@@ -26,7 +26,10 @@
             <div class="club-desc">{{ club.description }}</div>
             <div class="bottom">
               <span class="president">社长: {{ club.presidentName }}</span>
-              <el-button type="primary" link class="button" @click="handleApply(club.id)">申请加入</el-button>
+
+              <el-button type="primary" link class="button" :disabled="club.isJoined" @click="handleApply(club.id)">
+                {{ club.isJoined ? '已提交申请或已加入' : '申请加入' }}
+              </el-button>
             </div>
           </div>
         </el-card>
@@ -99,30 +102,23 @@ const handleSearch = () => {
 
 const handleApply = async (clubId) => {
   try {
-    // 二次确认弹窗 (优化体验)
     await ElMessageBox.confirm('确定要申请加入该社团吗?', '提示', {
       confirmButtonText: '确定申请',
       cancelButtonText: '再看看',
       type: 'info'
-    })
+    });
 
-    // 发送请求
-    await request.post('/club/join', { clubId: clubId })
+    await request.post('/club/join', { clubId: clubId });
+    ElMessage.success('申请提交成功！');
 
-    ElMessage.success('申请提交成功！')
-
+    // 成功后重新拉取列表，按钮会自动变为“已提交申请”并禁用
+    fetchClubs();
 
   } catch (error) {
-    // 用户点击取消，或者后端报错，都会进这里
-    if (error !== 'cancel') {
-      console.error(error)
-    }
+    if (error !== 'cancel') console.error(error);
   }
-  const openCreateDialog = () => {
-    ElMessage.info('申请创建社团功能开发中...')
-  }
-
 }
+
 // ClubList.vue <script setup> 部分
 const createDialogVisible = ref(false)
 const submitting = ref(false)

@@ -14,4 +14,5 @@ public class ClubVO {
     private Integer status;
     private LocalDateTime createTime;
     private Integer memberCount;
+    private Boolean isJoined;
 }

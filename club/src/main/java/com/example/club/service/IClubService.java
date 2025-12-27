@@ -32,4 +32,5 @@ public interface IClubService extends IService<Club> {
 
     boolean saveClubWithAdmin(Club club);
 
+    void transferPresident(Long clubId, Long newPresidentUserId);
 }

@@ -38,20 +38,38 @@
                     </template>
                 </el-table-column>
 
-                <el-table-column label="操作">
+                <el-table-column label="操作" min-width="150">
                     <template #default="scope">
-                        <el-button v-if="scope.row.memberRole === 2 && scope.row.joinStatus === 1" type="primary"
-                            size="small" @click="handleManage(scope.row.clubId)">
+                        <el-button 
+                            v-if="scope.row.joinStatus === 1 && scope.row.memberRole === 2" 
+                            type="primary"
+                            size="small" 
+                            @click="handleManage(scope.row.clubId)"
+                        >
                             管理社团
                         </el-button>
 
-                        <el-button v-if="scope.row.joinStatus === 1" type="danger" size="small" link
-                            @click="handleQuit(scope.row.clubId)">
-                            退出
-                        </el-button>
                         <el-button v-if="scope.row.joinStatus === 0" type="info" size="small" disabled>
                             等待审核
                         </el-button>
+
+                        <el-button 
+                            v-if="scope.row.joinStatus === 1 && scope.row.memberRole !== 2" 
+                            type="danger" 
+                            link
+                            size="small"
+                            @click="handleQuit(scope.row.clubId)"
+                        >
+                            退出社团
+                        </el-button>
+
+                        <el-tooltip 
+                            v-if="scope.row.joinStatus === 1 && scope.row.memberRole === 2" 
+                            content="社长需先转让职位后方可退出" 
+                            placement="top"
+                        >
+                            <el-button type="info" link disabled size="small">退出社团</el-button>
+                        </el-tooltip>
                     </template>
                 </el-table-column>
             </el-table>
@@ -61,27 +79,21 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router' // 1. 引入 useRouter
+import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-// 2. 初始化 router
 const router = useRouter()
-
 const myClubList = ref([])
 
-// 简单的时间格式化
 const formatTime = (timeStr) => {
     if (!timeStr) return ''
     return timeStr.replace('T', ' ').substring(0, 19)
 }
 
 const fetchMyClubs = async () => {
-    // 调试技巧：如果请求不通，在这里打印一下 res
-    // console.log('开始请求 /club/my')
     try {
         const res = await request.get('/club/my')
-        // console.log('我的社团数据:', res)
         myClubList.value = res
     } catch (e) {
         console.error('请求失败:', e)
@@ -89,22 +101,40 @@ const fetchMyClubs = async () => {
 }
 
 const handleManage = (clubId) => {
-    router.push(`/club/manage/${clubId}`) 
+    router.push(`/club/manage/${clubId}`)
 }
 
-const handleQuit = (clubId) => {
-    ElMessageBox.confirm('确定要退出该社团吗？', '提示', { type: 'warning' })
-        .then(() => {
-            ElMessage.info('退出功能暂未开发')
-        })
-}
+const handleQuit = (id) => {
+    ElMessageBox.confirm(
+        '确定要退出该社团吗？退出后需重新申请才能加入。',
+        '退出确认',
+        {
+            confirmButtonText: '确定退出',
+            cancelButtonText: '取消',
+            type: 'warning',
+        }
+    ).then(async () => {
+        try {
+            // 注意：这里传的是 clubId
+            await request.post('/club/member/quit', { clubId: id });
+            ElMessage.success('退出成功');
+            fetchMyClubs(); 
+        } catch (error) {
+            console.error('退出失败', error);
+        }
+    }).catch(() => { });
+};
 
 onMounted(() => {
     fetchMyClubs()
 })
 </script>
+
 <style scoped>
 .card-header {
     font-weight: bold;
+}
+.my-club-container {
+    padding: 10px;
 }
 </style>

@@ -30,7 +30,6 @@
             </el-icon>
             <span>社团管理</span>
           </el-menu-item>
-
           <el-menu-item index="/club/list">
             <el-icon>
               <Trophy />

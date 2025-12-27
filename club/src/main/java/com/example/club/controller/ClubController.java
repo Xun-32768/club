@@ -140,4 +140,21 @@ public class ClubController {
         }
         return Result.fail("未找到该社团记录");
     }
+
+    @PostMapping("/transfer")
+    public Result<?> transferPresident(@RequestBody Map<String, Long> params) {
+        Long clubId = params.get("clubId");
+        Long newPresidentUserId = params.get("newUserId");
+
+        if (clubId == null || newPresidentUserId == null) {
+            return Result.fail("参数不完整");
+        }
+
+        try {
+            clubService.transferPresident(clubId, newPresidentUserId);
+            return Result.success("社长职位转让成功");
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
 }

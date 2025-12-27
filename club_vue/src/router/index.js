@@ -61,6 +61,7 @@ const router = createRouter({
           name: "AdminClubManage",
           component: () => import("../views/admin/AdminClubManage.vue"),
         },
+        
       ],
     },
     // --- 活动相关路由 ---

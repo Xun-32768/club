@@ -12,5 +12,5 @@ import com.baomidou.mybatisplus.extension.service.IService;
  * @since 2025-12-22
  */
 public interface IClubMemberService extends IService<ClubMember> {
-
+    void quitClub(Long clubId);
 }
