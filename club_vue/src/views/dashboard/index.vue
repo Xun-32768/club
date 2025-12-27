@@ -12,9 +12,6 @@
             <el-tag size="small" effect="dark">
               {{ userInfo.username }}
             </el-tag>
-            <el-tag size="small" type="success" style="margin-left: 10px">
-              {{ userInfo.college || '未知学院' }}
-            </el-tag>
           </div>
         </div>
       </div>

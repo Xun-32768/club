@@ -33,6 +33,30 @@
       </el-col>
     </el-row>
   </div>
+
+  <div class="club-list">
+    <el-dialog v-model="createDialogVisible" title="申请创建新社团" width="500px">
+      <el-form :model="createForm" :rules="createRules" ref="createFormRef" label-width="100px">
+        <el-form-item label="社团名称" prop="name">
+          <el-input v-model="createForm.name" placeholder="请输入社团名称" />
+        </el-form-item>
+        <el-form-item label="社团分类" prop="category">
+          <el-select v-model="createForm.category" placeholder="请选择分类">
+            <el-option label="科技" value="科技" />
+            <el-option label="艺术" value="艺术" />
+            <el-option label="体育" value="体育" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="社团简介" prop="description">
+          <el-input v-model="createForm.description" type="textarea" rows="4" placeholder="请简要介绍社团..." />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitCreateClub" :loading="submitting">提交申请</el-button>
+      </template>
+    </el-dialog>
+  </div>
 </template>
 
 <script setup>
@@ -97,6 +121,49 @@ const handleApply = async (clubId) => {
   const openCreateDialog = () => {
     ElMessage.info('申请创建社团功能开发中...')
   }
+
+}
+// ClubList.vue <script setup> 部分
+const createDialogVisible = ref(false)
+const submitting = ref(false)
+const createFormRef = ref(null)
+
+const createForm = reactive({
+  name: '',
+  category: '',
+  description: ''
+})
+
+const createRules = {
+  name: [{ required: true, message: '请输入社团名称', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择分类', trigger: 'change' }],
+  description: [{ required: true, message: '请输入社团简介', trigger: 'blur' }]
+}
+
+// 打开弹窗
+const openCreateDialog = () => {
+  createDialogVisible.value = true
+  // 重置表单
+  if (createFormRef.value) createFormRef.value.resetFields()
+}
+
+// 提交申请
+const submitCreateClub = () => {
+  createFormRef.value.validate(async (valid) => {
+    if (valid) {
+      submitting.value = true
+      try {
+        await request.post('/club/add', createForm)
+        ElMessage.success('申请提交成功，请等待系统管理员审核！')
+        createDialogVisible.value = false
+        fetchClubs() // 刷新列表
+      } catch (error) {
+        console.error(error)
+      } finally {
+        submitting.value = false
+      }
+    }
+  })
 }
 </script>
 

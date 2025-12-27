@@ -49,7 +49,66 @@
                 </el-tab-pane>
 
                 <el-tab-pane label="活动发布" name="activity">
-                    <el-empty description="活动发布功能即将上线..." />
+                    <div class="tab-action">
+                        <el-radio-group v-model="activityStatusFilter" size="small" @change="fetchClubActivities">
+                            <el-radio-button :label="-1">全部活动</el-radio-button>
+                            <el-radio-button :label="1">进行中</el-radio-button>
+                            <el-radio-button :label="2">已结束</el-radio-button>
+                        </el-radio-group>
+                        <el-button type="primary" size="small" @click="openActivityDialog">发布新活动</el-button>
+                    </div>
+
+                    <el-table :data="clubActivityList" v-loading="activityLoading" style="width: 100%; margin-top: 15px"
+                        stripe>
+                        <el-table-column prop="title" label="活动名称" min-width="150" />
+                        <el-table-column prop="location" label="地点" width="120" />
+                        <el-table-column label="活动时间" width="180">
+                            <template #default="scope">
+                                {{ formatTime(scope.row.startTime) }}
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="状态" width="100">
+                            <template #default="scope">
+                                <el-tag v-if="scope.row.status === 1" type="success">已发布</el-tag>
+                                <el-tag v-else-if="scope.row.status === 2" type="info">已结束</el-tag>
+                                <el-tag v-else type="warning">草稿</el-tag>
+                            </template>
+                        </el-table-column>
+                        <el-table-column label="操作" width="120">
+                            <template #default="scope">
+                                <el-button type="danger" link size="small"
+                                    @click="handleDeleteActivity(scope.row.id)">删除</el-button>
+                            </template>
+                        </el-table-column>
+                    </el-table>
+
+                    <el-dialog v-model="activityVisible" title="发布新活动" width="600px">
+                        <el-form :model="activityForm" :rules="activityRules" ref="activityFormRef" label-width="100px">
+                            <el-form-item label="活动标题" prop="title">
+                                <el-input v-model="activityForm.title" placeholder="请输入活动标题" />
+                            </el-form-item>
+                            <el-form-item label="活动地点" prop="location">
+                                <el-input v-model="activityForm.location" placeholder="请输入活动地点" />
+                            </el-form-item>
+                            <el-form-item label="活动时间" prop="timeRange">
+                                <el-date-picker v-model="activityForm.timeRange" type="datetimerange"
+                                    range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间"
+                                    value-format="YYYY-MM-DD HH:mm:ss" />
+                            </el-form-item>
+                            <el-form-item label="人数限制" prop="maxPeople">
+                                <el-input-number v-model="activityForm.maxPeople" :min="0" placeholder="0表示不限" />
+                            </el-form-item>
+                            <el-form-item label="活动内容" prop="content">
+                                <el-input v-model="activityForm.content" type="textarea" rows="4"
+                                    placeholder="请输入活动详情..." />
+                            </el-form-item>
+                        </el-form>
+                        <template #footer>
+                            <el-button @click="activityVisible = false">取消</el-button>
+                            <el-button type="primary" @click="submitActivity"
+                                :loading="activityLoading">立即发布</el-button>
+                        </template>
+                    </el-dialog>
                 </el-tab-pane>
 
             </el-tabs>
@@ -58,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import request from '@/utils/request'
@@ -72,6 +131,21 @@ const activeTab = ref('member')
 const memberList = ref([])
 const loading = ref(false)
 const filterStatus = ref(-1) // -1表示查全部
+
+const activityVisible = ref(false)
+const activityLoading = ref(false)
+const activityFormRef = ref(null)
+const activityForm = reactive({
+    clubId: route.params.id, // 当前管理的社团ID
+    title: '',
+    location: '',
+    timeRange: [],
+    maxPeople: 0,
+    content: ''
+})
+
+const clubActivityList = ref([]);
+const activityStatusFilter = ref(-1);
 
 // 返回上一页
 const goBack = () => router.back()
@@ -120,6 +194,67 @@ onMounted(() => {
         router.push('/my-club')
     }
 })
+
+const activityRules = {
+    title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
+    location: [{ required: true, message: '请输入地点', trigger: 'blur' }],
+    timeRange: [{ required: true, message: '请选择时间', trigger: 'change' }],
+    content: [{ required: true, message: '请输入活动内容', trigger: 'blur' }]
+}
+
+const openActivityDialog = () => {
+    activityVisible.value = true
+    if (activityFormRef.value) activityFormRef.value.resetFields()
+}
+
+// 获取该社团的活动列表
+const fetchClubActivities = async () => {
+    activityLoading.value = true;
+    try {
+        const res = await request.get(`/activity/club/${clubId}`);
+        // 如果有状态过滤需求，可以在前端过滤，或者后端接口加参数
+        if (activityStatusFilter.value !== -1) {
+            clubActivityList.value = res.filter(a => a.status === activityStatusFilter.value);
+        } else {
+            clubActivityList.value = res;
+        }
+    } catch (e) {
+        console.error('获取活动列表失败', e);
+    } finally {
+        activityLoading.value = false;
+    }
+};
+
+// 修改 submitActivity 成功后的逻辑
+const submitActivity = () => {
+    activityFormRef.value.validate(async (valid) => {
+        if (valid) {
+            // ... 原有发送请求代码 ...
+            await request.post('/activity/add', postData);
+            ElMessage.success('活动发布成功！');
+            activityVisible.value = false;
+            fetchClubActivities(); // 成功后刷新列表
+        }
+    });
+};
+
+// 删除活动逻辑
+const handleDeleteActivity = (id) => {
+    ElMessageBox.confirm('确定要删除该活动吗？', '提示', { type: 'warning' }).then(async () => {
+        // 建议后端实现逻辑删除或 status 改为已取消
+        // await request.delete(`/activity/${id}`); 
+        ElMessage.success('删除功能待后端实现');
+    });
+};
+
+// 在原有的 onMounted 中增加调用
+onMounted(() => {
+    if (clubId) {
+        fetchMembers();
+        fetchClubActivities(); // 新增调用
+    }
+    // ...
+});
 </script>
 
 <style scoped>

@@ -11,5 +11,7 @@ public class ClubVO {
     private String description;
     private String presidentName; // 增加这个字段
     private Long creatorId;
+    private Integer status;
     private LocalDateTime createTime;
+    private Integer memberCount;
 }

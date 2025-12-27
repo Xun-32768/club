@@ -3,6 +3,7 @@ package com.example.club.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.club.entity.Club;
@@ -45,39 +46,56 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
     private ClubMemberMapper clubMemberMapper;
 
     public Page<ClubVO> listClubs(ClubQueryDTO dto) {
-        // 1. 构建分页对象
-        Page<Club> page = new Page<>(dto.page() == null ? 1 : dto.page(), dto.size() == null ? 10 : dto.size());
 
-        // 2. 构建查询条件
+        // 1. 获取当前用户ID和角色
+        Long userId = UserContext.getUserId();
+        User user = userService.getById(userId);
+        Integer role = user.getSystemRole(); // 0-超级管理员, 1-普通学生
+
+        Page<Club> page = new Page<>(dto.page() == null ? 1 : dto.page(), dto.size() == null ? 10 : dto.size());
         LambdaQueryWrapper<Club> wrapper = new LambdaQueryWrapper<>();
-        // 只查询状态为 "正常(1)" 的社团
-        wrapper.eq(Club::getStatus, 1);
-        // 如果有搜索词，模糊查询名称
+
+//        只显示审核通过的社团
+        wrapper.eq(Club::getStatus, 1).orderByAsc(Club::getStatus);
         wrapper.like(StrUtil.isNotBlank(dto.name()), Club::getName, dto.name());
-        // 按创建时间倒序
         wrapper.orderByDesc(Club::getCreateTime);
 
-        // 3. 执行查询
         this.page(page, wrapper);
 
-        // 4. 类型转换 Entity -> VO (为了填充社长姓名)
+ // 类型转换 Entity -> VO
         List<Club> records = page.getRecords();
         if (records.isEmpty()) {
             return new Page<>();
         }
 
-        // 4.1 提取所有的社长ID (creator_id)
+        //  提取所有的社长ID (creator_id)
         List<Long> userIds = records.stream().map(Club::getCreatorId).collect(Collectors.toList());
 
-        // 4.2 批量查询对应的用户 (避免循环查库，性能关键！)
+        // 获取社长姓名
         Map<Long, String> userMap = userService.listByIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getRealName));
 
+        //批量统计每个社团的成员数量
+        List<Long> clubIds = records.stream().map(Club::getId).collect(Collectors.toList());
+
+        // 查询 club_member 表中状态为已入社(1)的记录，并按社团ID分组统计
+        QueryWrapper<ClubMember> memberQuery = new QueryWrapper<>();
+        memberQuery.select("club_id", "count(*) as count")
+                .in("club_id", clubIds)
+                .eq("status", 1) // 只统计正式成员
+                .groupBy("club_id");
+
+        List<Map<String, Object>> countMaps = clubMemberMapper.selectMaps(memberQuery);
+        Map<Long, Integer> countMap = countMaps.stream().collect(Collectors.toMap(
+                m -> Long.valueOf(m.get("club_id").toString()),
+                m -> Integer.valueOf(m.get("count").toString())
+        ));
         // 4.3 组装 VO
         List<ClubVO> voList = records.stream().map(club -> {
             ClubVO vo = new ClubVO();
             BeanUtil.copyProperties(club, vo); // Hutool 工具类拷贝属性
             vo.setPresidentName(userMap.getOrDefault(club.getCreatorId(), "未知"));
+            vo.setMemberCount(countMap.getOrDefault(club.getId(), 0));
             return vo;
         }).collect(Collectors.toList());
 
@@ -197,23 +215,26 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
         clubMemberMapper.updateById(member);
     }
 
+    // 修改 ClubServiceImpl.java 中的相应部分
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean saveClubWithAdmin(Club club) {
-        // 1. 保存社团（Mybatis-Plus 会自动生成 19位 ID 并回填到 club 对象）
+        // 1. 设置初始状态为 0 (审核中)
+        club.setStatus(0);
+        // 2. 保存社团（Mybatis-Plus 会自动生成 ID）
         boolean saved = this.save(club);
 
         if (saved) {
-            // 2. 将创建者添加为社团成员
+            // 3. 将创建者添加为成员，且职位为社长(2)，状态为已入社(1)
             ClubMember admin = new ClubMember();
-            admin.setClubId(club.getId());      // 刚才生成的长 ID
-            admin.setUserId(club.getCreatorId()); // 创建者 ID
-            admin.setMemberRole(2);               // 角色设置为 社长
-            admin.setStatus(1);                   // 状态设置为已加入(1)
-
+            admin.setClubId(club.getId());
+            admin.setUserId(club.getCreatorId());
+            admin.setMemberRole(2);
+            admin.setStatus(1);
             clubMemberMapper.insert(admin);
         }
-
         return saved;
     }
+
+
 }

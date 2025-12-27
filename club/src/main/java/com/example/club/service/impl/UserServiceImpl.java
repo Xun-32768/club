@@ -9,6 +9,7 @@ import com.example.club.entity.dto.RegisterDTO;
 import com.example.club.mapper.UserMapper;
 import com.example.club.service.IUserService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.club.utils.UserContext;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -79,5 +80,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         String token = JWTUtil.createToken(payload, JWT_KEY);
 
         return token;
+    }
+
+    @Override
+    public void updatePassword(String oldPassword, String newPassword) {
+        // 1. 获取当前登录用户 ID
+        Long userId = UserContext.getUserId();
+        User user = this.getById(userId);
+
+        // 2. 校验旧密码是否正确 (MD5 加密后比对)
+        if (!user.getPassword().equals(SecureUtil.md5(oldPassword))) {
+            throw new RuntimeException("旧密码不正确");
+        }
+
+        // 3. 更新新密码
+        user.setPassword(SecureUtil.md5(newPassword));
+        this.updateById(user);
     }
 }
