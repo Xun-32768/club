@@ -3,11 +3,13 @@ package com.example.club.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.club.common.Result;
 import com.example.club.entity.Club;
+import com.example.club.entity.User;
 import com.example.club.entity.dto.ClubQueryDTO;
 import com.example.club.entity.vo.ClubMemberVO;
 import com.example.club.entity.vo.ClubVO;
 import com.example.club.entity.vo.MyClubVO;
 import com.example.club.service.IClubService;
+import com.example.club.service.IUserService;
 import com.example.club.utils.UserContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,11 +32,12 @@ import java.util.Map;
 public class ClubController {
     @Autowired
     private IClubService clubService;
+    @Autowired
+    private IUserService userService;
 
     // 分页获取社团列表
     @PostMapping("/list") // 建议用 POST 方便传 JSON 对象，GET 也可以
     public Result<Page<ClubVO>> list(@RequestBody ClubQueryDTO queryDTO) {
-        log.info("获取社团列表");
         Page<ClubVO> page = clubService.listClubs(queryDTO);
         return Result.success(page);
     }
@@ -100,5 +103,41 @@ public class ClubController {
             return Result.success(club);
         }
         return Result.fail("创建失败");
+    }
+
+    @PostMapping("/audit")
+    public Result<?> auditClub(@RequestBody Map<String, Object> params) {
+        // params: { "clubId": "xxx", "status": 1 } 1-通过, 2-驳回
+        Long clubId = Long.valueOf(params.get("clubId").toString());
+        Integer status = (Integer) params.get("status");
+
+        Club club = clubService.getById(clubId);
+        if (club != null) {
+            club.setStatus(status);
+            clubService.updateById(club);
+            return Result.success("审核操作成功");
+        }
+        return Result.fail("社团不存在");
+    }
+
+    @PostMapping("/admin/audit")
+    public Result<?> adminAudit(@RequestBody Map<String, Object> params) {
+        // 获取参数
+        Long clubId = Long.valueOf(params.get("clubId").toString());
+        Integer status = (Integer) params.get("status"); // 1-通过, 2-驳回
+
+        // 简单校验权限
+        User user = userService.getById(UserContext.getUserId());
+        if (user.getSystemRole() != 0) {
+            return Result.fail("只有管理员有此权限");
+        }
+
+        Club club = clubService.getById(clubId);
+        if (club != null) {
+            club.setStatus(status);
+            clubService.updateById(club);
+            return Result.success("审核操作已完成");
+        }
+        return Result.fail("未找到该社团记录");
     }
 }

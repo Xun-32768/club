@@ -23,6 +23,7 @@ const router = createRouter({
         },
       ],
     },
+    // 社团相关路由
     {
       path: "/club",
       component: Layout,
@@ -42,6 +43,40 @@ const router = createRouter({
           path: "/club/manage/:id",
           name: "ClubManage",
           component: () => import("../views/club/ClubManage.vue"),
+        },
+      ],
+    },
+    // 管理员专用路由
+    {
+      path: "/admin",
+      component: Layout,
+      children: [
+        {
+          path: "club-audit",
+          name: "AdminClubAudit",
+          component: () => import("../views/admin/AdminClubAudit.vue"),
+        },
+        {
+          path: "club-manage",
+          name: "AdminClubManage",
+          component: () => import("../views/admin/AdminClubManage.vue"),
+        },
+      ],
+    },
+    // --- 活动相关路由 ---
+    {
+      path: "/activity",
+      component: Layout,
+      children: [
+        {
+          path: "list", // 访问路径：/activity/list (活动中心)
+          name: "ActivityList",
+          component: () => import("../views/activity/ActivityList.vue"),
+        },
+        {
+          path: "my", // 访问路径：/activity/my
+          name: "MyActivity",
+          component: () => import("../views/activity/MyActivity.vue"),
         },
       ],
     },

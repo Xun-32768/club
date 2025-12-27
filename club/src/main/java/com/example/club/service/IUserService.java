@@ -18,4 +18,6 @@ public interface IUserService extends IService<User> {
     void register(RegisterDTO dto);
 
     String login(LoginDTO dto);
+
+    void updatePassword(String oldPassword, String newPassword);
 }

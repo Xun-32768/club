@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 /**
  * <p>
  * 用户表 前端控制器
@@ -49,7 +51,18 @@ public class UserController {
             return Result.fail(e.getMessage());
         }
     }
-
+//    修改密码
+    @PostMapping("/updatePassword")
+    public Result<?> updatePassword(@RequestBody Map<String, String> params) {
+        try {
+            String oldPassword = params.get("oldPassword");
+            String newPassword = params.get("newPassword");
+            userService.updatePassword(oldPassword, newPassword);
+            return Result.success("密码修改成功");
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
+    }
 
     /**
      * 获取当前登录用户信息
@@ -69,4 +82,5 @@ public class UserController {
         }
         return Result.fail("用户不存在");
     }
+
 }
