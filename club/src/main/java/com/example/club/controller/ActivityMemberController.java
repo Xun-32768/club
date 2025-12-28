@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.club.common.Result;
 import com.example.club.entity.ActivityMember;
 import com.example.club.entity.User;
+import com.example.club.entity.vo.ClubMemberVO;
 import com.example.club.entity.vo.MyActivityVO;
 import com.example.club.service.IActivityMemberService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,28 @@ public class ActivityMemberController {
         }
     }
 
+    @GetMapping("/list/{activityId}")
+    public Result<List<ClubMemberVO>> getActivityMembers(@PathVariable Long activityId) {
+        return Result.success(activityMemberService.getActivityMembers(activityId));
+    }
+
+    // 签到
+    @PostMapping("/checkin/{recordId}")
+    public Result<?> checkin(@PathVariable Long recordId) {
+        try{
+            activityMemberService.checkin(recordId);
+        }catch (Exception e){
+            return Result.fail(e.getMessage());
+        }
+        return Result.success("签到成功");
+    }
+
+    // 移除活动成员
+    @DeleteMapping("/remove/{recordId}")
+    public Result<?> removeActivityMember(@PathVariable Long recordId) {
+        activityMemberService.removeSignup(recordId);
+        return Result.success("移除成功");
+    }
 
 }
 

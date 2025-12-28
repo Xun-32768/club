@@ -83,14 +83,33 @@
                                 <el-tag v-else type="warning">草稿</el-tag>
                             </template>
                         </el-table-column>
-                        <el-table-column label="操作" width="120">
+                        <el-table-column label="操作" width="200">
                             <template #default="scope">
+                                <el-button type="primary" link size="small"
+                                    @click="openMemberManage(scope.row)">管理成员</el-button>
                                 <el-button type="danger" link size="small"
                                     @click="handleDeleteActivity(scope.row.id)">删除</el-button>
                             </template>
                         </el-table-column>
                     </el-table>
 
+                    <!-- 活动成员管理弹窗 -->
+                    <el-dialog v-model="memberDialogVisible" :title="'活动成员 - ' + currentActivityTitle" width="800px"
+                        append-to-body>
+                        <el-table :data="activityMembers" v-loading="memberLoading" stripe>
+                            <el-table-column prop="realName" label="姓名" />
+                            <el-table-column prop="username" label="学号" />
+                            <el-table-column label="操作" width="150">
+                                <template #default="scope">
+                                    <el-button v-if="scope.row.status === 0" type="success" size="small" link
+                                        @click="handleCheckin(scope.row)">签到</el-button>
+                                    <el-button type="danger" size="small" link
+                                        @click="handleRemoveSignup(scope.row.id)">移除</el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-dialog>
+                    <!-- 发布新活动弹窗 -->
                     <el-dialog v-model="activityVisible" title="发布新活动" width="600px">
                         <el-form :model="activityForm" :rules="activityRules" ref="activityFormRef" label-width="100px">
                             <el-form-item label="活动标题" prop="title">
@@ -294,7 +313,7 @@ const handleTransfer = (memberRow) => {
                 newUserId: memberRow.userId // 注意这里使用的是成员对应的用户ID
             });
             ElMessage.success('转让成功，正在退出管理页面...');
-            
+
             // 转让后由于失去权限，跳转回“我的社团”
             setTimeout(() => {
                 router.push('/my-club');
@@ -302,16 +321,62 @@ const handleTransfer = (memberRow) => {
         } catch (error) {
             console.error('转让失败', error);
         }
-    }).catch(() => {});
+    }).catch(() => { });
 };
 
+const memberDialogVisible = ref(false)
+const memberLoading = ref(false)
+const activityMembers = ref([])
+const currentActivityTitle = ref('')
+const currentActivityId = ref(null); // 新增变量
+
+const openMemberManage = async (row) => {
+    currentActivityTitle.value = row.title;
+    currentActivityId.value = row.id; // 必须赋值，供 handleCheckin 刷新使用
+    memberDialogVisible.value = true;
+    fetchActivityMembers(row.id);
+}
+
+const fetchActivityMembers = async (activityId) => {
+    memberLoading.value = true
+    try {
+        const res = await request.get(`/activity/member/list/${activityId}`)
+        activityMembers.value = res
+    } finally {
+        memberLoading.value = false
+    }
+}
+
+const handleCheckin = async (record) => {
+
+    if (!record || !record.id) {
+        ElMessage.error("错误：无法获取报名记录ID");
+        return;
+    }
+    try {
+        await request.post(`/activity/member/checkin/${record.id}`);
+        ElMessage.success('签到成功');
+        if (currentActivityId.value) {
+            fetchActivityMembers(currentActivityId.value);
+        }
+    } catch (error) {
+        console.error('签到失败:', error);
+    }
+}
+
+const handleRemoveSignup = (recordId) => {
+    ElMessageBox.confirm('确定要移除该报名成员吗？', '提示', { type: 'warning' }).then(async () => {
+        await request.delete(`/activity/member/remove/${recordId}`)
+        ElMessage.success('移除成功')
+        // 重新刷新列表
+    })
+}
 // 在原有的 onMounted 中增加调用
 onMounted(() => {
     if (clubId) {
         fetchMembers();
-        fetchClubActivities(); // 新增调用
+        fetchClubActivities(); 
     }
-    // ...
 });
 </script>
 
