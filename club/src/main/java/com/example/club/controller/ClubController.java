@@ -36,7 +36,7 @@ public class ClubController {
     private IUserService userService;
 
     // 分页获取社团列表
-    @PostMapping("/list") // 建议用 POST 方便传 JSON 对象，GET 也可以
+    @PostMapping("/list")
     public Result<Page<ClubVO>> list(@RequestBody ClubQueryDTO queryDTO) {
         Page<ClubVO> page = clubService.listClubs(queryDTO);
         return Result.success(page);
@@ -45,7 +45,6 @@ public class ClubController {
     // 申请加入社团
     @PostMapping("/join")
     public Result<?> joinClub(@RequestBody Map<String, Long> params) {
-        // 前端传 JSON: { "clubId": 123 }
         Long clubId = params.get("clubId");
 
         log.info("申请加入社团：{}",clubId);
@@ -76,7 +75,6 @@ public class ClubController {
     // 审核成员
     @PostMapping("/member/audit")
     public Result<?> auditMember(@RequestBody Map<String, Object> params) {
-        // 前端传 { "memberId": 100, "pass": true }
         Long memberId = Long.valueOf(params.get("memberId").toString());
         Boolean pass = (Boolean) params.get("pass");
         log.info("成员审核：{},{}",memberId,pass);
@@ -91,15 +89,13 @@ public class ClubController {
 
     @PostMapping("/add")
     public Result<Club> createClub(@RequestBody Club club) {
-        log.info("新增社团");
-        // 假设当前登录用户 ID 从权限上下文中获取
+        log.info("新增社团: {}",club.getName());
         Long currentUserId = UserContext.getUserId();
         club.setCreatorId(currentUserId);
 
         boolean saved = clubService.saveClubWithAdmin(club);
 
         if (saved) {
-            // 返回包含 String 格式 ID 的对象
             return Result.success(club);
         }
         return Result.fail("创建失败");
@@ -107,7 +103,6 @@ public class ClubController {
 
     @PostMapping("/audit")
     public Result<?> auditClub(@RequestBody Map<String, Object> params) {
-        // params: { "clubId": "xxx", "status": 1 } 1-通过, 2-驳回
         Long clubId = Long.valueOf(params.get("clubId").toString());
         Integer status = (Integer) params.get("status");
 

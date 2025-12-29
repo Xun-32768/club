@@ -70,9 +70,7 @@ public class ActivityMemberServiceImpl extends ServiceImpl<ActivityMemberMapper,
         this.save(record);
     }
 
-    // IActivityMemberService.java 增加接口
 
-    // ActivityMemberServiceImpl.java 实现
     @Override
     public List<MyActivityVO> getMyActivities() {
         Long userId = UserContext.getUserId();

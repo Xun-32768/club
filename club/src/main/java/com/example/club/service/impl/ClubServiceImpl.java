@@ -52,18 +52,18 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
         // 获取当前用户ID用于判断加入状态
         Long userId = UserContext.getUserId();
 
-        // 1. 分页查询社团基础信息
+        // 分页查询社团基础信息
         Page<Club> page = new Page<>(dto.page() == null ? 1 : dto.page(), dto.size() == null ? 10 : dto.size());
         LambdaQueryWrapper<Club> wrapper = new LambdaQueryWrapper<>();
 
         // 获取用户信息以判断系统角色
         User currentUser = userService.getById(userId);
-        // 管理员(0)看全部，普通学生看正常状态(1)
+        // 系统管理员(0)看全部，普通学生看正常状态(1)
         if (currentUser == null || currentUser.getSystemRole() != 0) {
             wrapper.eq(Club::getStatus, 1);
         }
 
-        // 模糊查询社团名称并按创建时间倒序
+        // 查询社团名称并按创建时间倒序
         wrapper.like(StrUtil.isNotBlank(dto.name()), Club::getName, dto.name());
         wrapper.orderByDesc(Club::getCreateTime);
         this.page(page, wrapper);
@@ -73,21 +73,21 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
             return new Page<>();
         }
 
-        // 2. 提取当前页社团ID和社长ID集合
+        // 提取当前页社团ID和社长ID集合
         List<Long> clubIds = records.stream().map(Club::getId).collect(Collectors.toList());
         List<Long> presidentIds = records.stream().map(Club::getCreatorId).distinct().collect(Collectors.toList());
 
-        // 3. 核心逻辑：查询当前用户与这些社团的关联状态
+        // 查询当前用户参与的社团
         Set<Long> joinedClubIds = clubMemberMapper.selectList(new LambdaQueryWrapper<ClubMember>()
                         .eq(ClubMember::getUserId, userId)
                         .in(ClubMember::getClubId, clubIds))
                 .stream().map(ClubMember::getClubId).collect(Collectors.toSet());
 
-        // 4. 扩展逻辑：批量查询社长姓名
+        // 批量查询社长姓名（社团表存的社长id）
         Map<Long, String> presidentMap = userService.listByIds(presidentIds).stream()
                 .collect(Collectors.toMap(User::getId, User::getRealName));
 
-        // 5. 扩展逻辑：批量统计每个社团的正式成员数量
+        //  批量统计每个社团的正式成员数量
         QueryWrapper<ClubMember> memberQuery = new QueryWrapper<>();
         memberQuery.select("club_id", "count(*) as count")
                 .in("club_id", clubIds)
@@ -100,24 +100,17 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
                 m -> Integer.valueOf(m.get("count").toString())
         ));
 
-        // 6. 组装 VO 列表
+        //  组装 VO 列表
         List<ClubVO> voList = records.stream().map(club -> {
             ClubVO vo = new ClubVO();
             BeanUtil.copyProperties(club, vo);
-
-            // 设置社长姓名
             vo.setPresidentName(presidentMap.getOrDefault(club.getCreatorId(), "未知"));
-
-            // 设置成员数量
             vo.setMemberCount(memberCountMap.getOrDefault(club.getId(), 0));
-
-            // 设置当前用户的加入状态
             vo.setIsJoined(joinedClubIds.contains(club.getId()));
-
             return vo;
         }).collect(Collectors.toList());
 
-        // 7. 封装返回分页结果
+        // 封装返回分页结果
         Page<ClubVO> resultPage = new Page<>();
         BeanUtil.copyProperties(page, resultPage, "records");
         resultPage.setRecords(voList);
@@ -127,10 +120,10 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
 
     @Override
     public void applyJoin(Long clubId) {
-        // 1. 获取当前登录用户 ID (从我们之前写的 UserContext 里拿)
+        // 获取当前登录用户 ID
         Long userId = UserContext.getUserId();
 
-        // 2. 检查是否重复申请/已加入
+        // 检查是否重复申请/已加入
         LambdaQueryWrapper<ClubMember> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ClubMember::getClubId, clubId)
                 .eq(ClubMember::getUserId, userId);
@@ -140,14 +133,13 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
             throw new RuntimeException("你已经加入或正在申请该社团，请勿重复操作");
         }
 
-        // 3. 插入申请记录
+        // 插入申请记录
         ClubMember member = new ClubMember();
         member.setClubId(clubId);
         member.setUserId(userId);
         member.setMemberRole(1); // 1-普通成员
         member.setStatus(0);     // 0-申请中 (待社长审核)
 
-        // MP 会自动填充雪花 ID 和创建时间
         clubMemberMapper.insert(member);
     }
 
@@ -233,17 +225,15 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
         clubMemberMapper.updateById(member);
     }
 
-    // 修改 ClubServiceImpl.java 中的相应部分
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean saveClubWithAdmin(Club club) {
-        // 1. 设置初始状态为 0 (审核中)
+        // 设置初始状态为 0 (审核中)
         club.setStatus(0);
-        // 2. 保存社团（Mybatis-Plus 会自动生成 ID）
         boolean saved = this.save(club);
 
         if (saved) {
-            // 3. 将创建者添加为成员，且职位为社长(2)，状态为已入社(1)
+            //  将创建者添加为成员，且职位为社长(2)，状态为已入社(1)
             ClubMember admin = new ClubMember();
             admin.setClubId(club.getId());
             admin.setUserId(club.getCreatorId());
@@ -253,6 +243,7 @@ public class ClubServiceImpl extends ServiceImpl<ClubMapper, Club> implements IC
         }
         return saved;
     }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void transferPresident(Long clubId, Long newPresidentUserId) {

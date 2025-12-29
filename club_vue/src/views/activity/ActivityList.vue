@@ -32,6 +32,12 @@
                         </div>
                         <div class="info-item">
                             <el-icon>
+                                <Calendar />
+                            </el-icon>
+                            <span>至 {{ formatTime(item.endTime) }}</span>
+                        </div>
+                        <div class="info-item">
+                            <el-icon>
                                 <Location />
                             </el-icon>
                             <span>{{ item.location }}</span>
@@ -70,8 +76,10 @@
                 <div class="detail-info">
                     <p><el-icon>
                             <Calendar />
-                        </el-icon> <b>时间：</b>{{ formatTime(currentActivity.startTime) }} 至 {{
-                            formatTime(currentActivity.endTime) }}</p>
+                        </el-icon> <b>开始时间：</b>{{ formatTime(currentActivity.startTime) }}</p>
+                    <p><el-icon>
+                            <Calendar />
+                        </el-icon> <b>结束时间：</b>{{ formatTime(currentActivity.endTime) }}</p>
                     <p><el-icon>
                             <Location />
                         </el-icon> <b>地点：</b>{{ currentActivity.location }}</p>
@@ -79,6 +87,15 @@
                             <User />
                         </el-icon> <b>人数限制：</b>{{ currentActivity.maxPeople === 0 ? '不限' : currentActivity.maxPeople +
                             '人' }}</p>
+                    <p v-if="currentActivity.currentPeople !== null && currentActivity.currentPeople !== undefined"><el-icon>
+                            <User />
+                        </el-icon> <b>已报名人数：</b>{{ currentActivity.currentPeople }}人</p>
+                    <p v-if="currentActivity.clubName"><el-icon>
+                            <Flag />
+                        </el-icon> <b>主办社团：</b>{{ currentActivity.clubName }}</p>
+                    <p v-if="currentActivity.status !== null && currentActivity.status !== undefined"><el-icon>
+                            <Flag />
+                        </el-icon> <b>活动状态：</b>{{ formatStatus(currentActivity.status) }}</p>
                 </div>
 
                 <el-divider content-position="left">活动介绍</el-divider>
@@ -101,7 +118,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { Calendar, Location, User } from '@element-plus/icons-vue'
+import { Calendar, Location, User, Flag } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -176,6 +193,17 @@ const isSignupAvailable = (item) => {
 
     return diff > oneDay; // 剩余时间大于24小时才允许
 }
+
+const formatStatus = (status) => {
+    const statusMap = {
+        0: '草稿',
+        1: '进行中',
+        2: '已结束',
+        3: '已取消'
+    }
+    return statusMap[status] || '未知状态'
+}
+
 onMounted(fetchActivities)
 </script>
 
